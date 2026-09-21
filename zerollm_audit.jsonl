@@ -1,0 +1,1 @@
+{"payload": {"event": "attack_blocked", "severity": "critical", "details": {"timestamp": 1790029461.3536084, "details": "\ud83d\udea8 [ZeroLLM Attack Blocked] Intercepted Malicious System Hijack Pattern: 'ignore previous instructions'"}, "ts": 1790029461.3536148}, "previous_hash": null, "record_hash": "dc5577f5545172667a23af47cf2f80b7ccc0e94a01d8c8a27cb7ceb177904792"}

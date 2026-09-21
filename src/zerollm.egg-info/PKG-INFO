@@ -1,0 +1,49 @@
+Metadata-Version: 2.4
+Name: zerollm
+Version: 0.1.0
+Summary: Automated AI Firewall & Prompt Injection Sandbox
+Author-email: "ZeroHack.org" <solutions@zerohack.org>
+License: MIT OR ZeroHack-Commercial
+Project-URL: Homepage, https://zerohack.org
+Project-URL: Documentation, https://zerohack.org/docs/zerollm
+Project-URL: Repository, https://github.com/ZeroHackOrg/zerollm
+Keywords: ai-firewall,prompt-injection,llm-security,proxy,dlp
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Security
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Provides-Extra: dev
+Requires-Dist: pytest>=7; extra == "dev"
+Requires-Dist: build; extra == "dev"
+Requires-Dist: twine; extra == "dev"
+
+# 🥷 Project ZeroLLM (`zerollm`)
+
+[![CI](https://img.shields.io/badge/CI-passing-brightgreen)](#)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#)
+
+**Automated AI Firewall & Prompt Injection Sandbox**
+Engineered by **[ZeroHack.org](https://zerohack.org)**.
+
+## Install
+
+```bash
+pip install -e .
+```
+
+## Quickstart
+
+```bash
+zerollm start
+zerollm web --port 9494
+```
+
+## License
+MIT / ZeroHack Commercial. solutions@zerohack.org.
