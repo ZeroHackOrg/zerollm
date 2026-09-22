@@ -4,33 +4,70 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zerollm"
-version = "0.1.0"
+version = "1.0.0"
 description = "Automated AI Firewall & Prompt Injection Sandbox"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT OR ZeroHack-Commercial" }
 authors = [{ name = "ZeroHack.org", email = "solutions@zerohack.org" }]
-keywords = ["ai-firewall", "prompt-injection", "llm-security", "proxy", "dlp"]
+keywords = [
+    "ai-firewall",
+    "prompt-injection",
+    "llm-security",
+    "proxy",
+    "dlp",
+    "openai",
+    "sse",
+    "zero-trust",
+]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: System Administrators",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Security",
 ]
-dependencies = []
+dependencies = [
+    "PyYAML>=6.0",
+    "jsonschema>=4.20",
+    "aiohttp>=3.9",
+    "prometheus-client>=0.19",
+    "PyJWT[crypto]>=2.8",
+    "cryptography>=42.0",
+]
 
 [project.optional-dependencies]
-dev = ["pytest>=7", "build", "twine"]
+dev = [
+    "pytest>=7.4",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "build>=1.2",
+    "twine>=5.0",
+    "httpx>=0.27",
+]
+ha = ["redis>=5.0"]
+otel = [
+    "opentelemetry-api>=1.24",
+    "opentelemetry-sdk>=1.24",
+    "opentelemetry-exporter-otlp-proto-http>=1.24",
+]
+s3 = ["boto3>=1.34"]
 
 [project.urls]
 Homepage = "https://zerohack.org"
 Documentation = "https://zerohack.org/docs/zerollm"
 Repository = "https://github.com/ZeroHackOrg/zerollm"
+Changelog = "https://github.com/ZeroHackOrg/zerollm/blob/main/CHANGELOG.md"
 
 [project.scripts]
 zerollm = "zerollm.cli.terminal:main"
@@ -38,6 +75,42 @@ zerollm = "zerollm.cli.terminal:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+zerollm = ["schema/*.json"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 110
+target-version = "py39"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "C4", "SIM", "RUF", "S"]
+ignore = [
+    "S101",   # asserts in tests are fine
+    "S603",   # subprocess calls in CLI
+    "S311",   # random not CSPRNG (upstream selection uses random)
+    "S104",   # binding to 0.0.0.0 is a documented server default
+    "S105",   # placeholder API keys in examples/tests
+    "S110",   # try/except pass in sink fan-out is intentional
+    "S112",   # simulation loop keep-alive
+    "S310",   # audit sink URL is operator-supplied config, not untrusted input
+    "RUF006", # audit background asyncio task is fire-and-forget by design
+    "RUF013", # Optional default sentinel pattern
+    "E501",   # line length kept pragmatic (majority are intentional), see ruff format
+    "UP006",  # keep PEP-585 out: package targets Python 3.9
+    "UP007",  # keep Optional[]: package targets Python 3.9
+    "UP035",  # keep typing imports: package targets Python 3.9
+    "UP045",  # keep Optional[] classification: package targets Python 3.9
+]
+
+[tool.mypy]
+python_version = "3.10"
+check_untyped_defs = true
+warn_return_any = false
+ignore_missing_imports = true
+files = ["src/zerollm"]

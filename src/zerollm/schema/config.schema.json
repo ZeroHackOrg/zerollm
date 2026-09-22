@@ -1,0 +1,261 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zerohack.org/schemas/zerollm/config.schema.json",
+  "title": "ZeroLLM configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "type": "string" },
+    "mode": { "enum": ["fail-open", "fail-closed"] },
+    "server": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "host": { "type": "string", "default": "0.0.0.0" },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 8080 },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cert_file": { "type": "string" },
+            "key_file": { "type": "string" }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_body_bytes": { "type": "integer", "minimum": 1024 },
+            "request_timeout_s": { "type": "number", "exclusiveMinimum": 0 },
+            "max_sse_buffered_bytes": { "type": "integer", "minimum": 1024 },
+            "graceful_shutdown_timeout_s": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "enum": ["none", "api-key", "oidc", "mtls"] },
+        "header": { "type": "string", "default": "Authorization" },
+        "api_keys": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "tenant"],
+            "properties": {
+              "name": { "type": "string" },
+              "tenant": { "type": "string" },
+              "key": { "type": "string", "minLength": 8 },
+              "key_hash": { "pattern": "^sha256:[0-9a-f]{64}$" },
+              "scopes": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+        "oidc": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "issuer": { "type": "string", "format": "uri" },
+            "audience": { "type": "string" },
+            "jwks_url": { "type": "string", "format": "uri" },
+            "roles_claim": { "type": "string", "default": "roles" },
+            "tenant_claim": { "type": "string", "default": "tenant" }
+          }
+        },
+        "mtls": { "type": "object", "additionalProperties": false, "properties": { "ca_cert_file": { "type": "string" } } }
+      }
+    },
+    "tenants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string" },
+          "quotas": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "rpm": { "type": "integer", "minimum": 0 },
+              "rpd": { "type": "integer", "minimum": 0 },
+              "tokens_per_min": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    "upstreams": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "base_url"],
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "enum": ["openai", "anthropic"] },
+          "base_url": { "type": "string", "format": "uri" },
+          "api_key_env": { "type": "string", "minLength": 1 },
+          "timeout_s": { "type": "number", "exclusiveMinimum": 0 },
+          "weight": { "type": "integer", "minimum": 1, "default": 1 },
+          "verify_tls": { "type": "boolean", "default": true },
+          "circuit_breaker": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "max_failures": { "type": "integer", "minimum": 1 },
+              "cooldown_s": { "type": "number", "exclusiveMinimum": 0 },
+              "threshold": { "type": "number", "minimum": 0, "maximum": 1 }
+            }
+          }
+        }
+      }
+    },
+    "routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "upstreams", "policy"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "methods": { "type": "array", "items": { "type": "string" }, "default": ["POST"] },
+          "upstreams": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+          "policy": { "type": "string" }
+        }
+      }
+    },
+    "policies": {
+      "type": "object",
+      "additionalProperties": { "type": "object" },
+      "properties": {
+        "default": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "decisions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "action", "detector"],
+                "properties": {
+                  "id": { "type": "string" },
+                  "action": { "enum": ["allow", "block", "redact", "flag"] },
+                  "on": { "enum": ["request", "response", "both", "stream"] },
+                  "detector": { "type": "string" },
+                  "min_confidence": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.5 },
+                  "max_severity": { "enum": ["info", "low", "medium", "high", "critical"] },
+                  "replace_with": { "type": "string", "default": "[REDACTED]" },
+                  "tenants": { "type": "array", "items": { "type": "string" }, "default": ["*"] },
+                  "reason": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "detectors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "type"],
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "enum": ["llm_judge"] },
+          "endpoint": { "type": "string", "format": "uri" },
+          "api_key_env": { "type": "string" },
+          "model": { "type": "string" },
+          "threshold": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.8 },
+          "timeout_s": { "type": "number", "exclusiveMinimum": 0, "default": 10 }
+        }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "path": { "type": "string" },
+        "signing": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "private_key_file": { "type": "string" },
+            "public_key_file": { "type": "string" }
+          }
+        },
+        "rotation": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_bytes": { "type": "integer", "minimum": 1024 },
+            "max_files": { "type": "integer", "minimum": 1 },
+            "fallback_dir": { "type": "string" }
+          }
+        },
+        "sinks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type"],
+            "properties": {
+              "type": { "enum": ["stdout", "file", "http", "s3"] },
+              "url": { "type": "string", "format": "uri" },
+              "path": { "type": "string" },
+              "bucket": { "type": "string" },
+              "region": { "type": "string" },
+              "auth_token_env": { "type": "string" },
+              "headers": { "type": "object" }
+            }
+          }
+        }
+      }
+    },
+    "otel": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "service_name": { "type": "string", "default": "zerollm" },
+        "endpoint": { "type": "string", "format": "uri" }
+      }
+    },
+    "redis": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "url": { "type": "string", "default": "redis://localhost:6379/0" }
+      }
+    },
+    "logging": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "level": { "enum": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], "default": "INFO" },
+        "format": { "enum": ["json", "text"], "default": "json" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "auth": { "properties": { "mode": { "const": "api-key" } } } } },
+      "then": { "properties": { "auth": { "required": ["api_keys"] } } }
+    },
+    {
+      "if": { "properties": { "auth": { "properties": { "mode": { "const": "oidc" } } } } },
+      "then": { "properties": { "auth": { "properties": { "oidc": { "required": ["issuer", "audience"] } } } } }
+    },
+    {
+      "if": { "properties": { "auth": { "properties": { "mode": { "const": "mtls" } } } } },
+      "then": { "properties": { "auth": { "properties": { "mtls": { "required": ["ca_cert_file"] } } } } }
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+# ZeroLLM quickstart stack.
+#
+#   docker compose up -d --build
+#   curl http://localhost:8080/healthz
+#
+# Requests are proxied through ZeroLLM before reaching OpenAI.
+services:
+  zerollm:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        ZEROLM_EXTRAS: "otel ha"
+    ports:
+      - "8080:8080"
+    environment:
+      ZEROLM_CONFIG: /etc/zerollm/zerollm.yaml
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?set OPENAI_API_KEY}
+    volumes:
+      - zerollm-data:/data
+      - ./zerollm.example.yml:/etc/zerollm/zerollm.yaml:ro
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2).status==200 else 1)"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Optional in-memory rate-limit/HA store (requires the `ha` extra in the image)
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+
+volumes:
+  zerollm-data:
+  redis-data:

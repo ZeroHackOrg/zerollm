@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "zerollm.fullname" . }}
+  labels:
+    {{- include "zerollm.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "zerollm.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "zerollm.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "zerollm.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "zerollm.fullname" . }}
+        - name: secrets
+          secret:
+            secretName: {{ include "zerollm.fullname" . }}
+            defaultMode: 0400
+        - name: data
+          emptyDir: {}
+      containers:
+        - name: zerollm
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: ZEROLM_CONFIG
+              value: /etc/zerollm/zerollm.yaml
+            {{- range .Values.upstreams }}
+            - name: UPSTREAM_{{ upper (regexReplaceAll "[^A-Za-z0-9]" .id "_") }}_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "zerollm.fullname" $ }}
+                  key: UPSTREAM_{{ upper (regexReplaceAll "[^A-Za-z0-9]" .id "_") }}_KEY
+            {{- end }}
+            {{- if .Values.redis.enabled }}
+            - name: ZEROLM_REDIS_URL
+              value: {{ .Values.redis.url | quote }}
+            {{- end }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/zerollm
+              readOnly: true
+            - name: secrets
+              mountPath: /etc/zerollm/secrets
+              readOnly: true
+            - name: data
+              mountPath: /data
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

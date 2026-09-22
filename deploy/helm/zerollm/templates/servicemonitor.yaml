@@ -1,0 +1,21 @@
+{{- if and .Values.metrics.serviceMonitor.enabled (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1") }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "zerollm.fullname" . }}
+  labels:
+    {{- include "zerollm.labels" . | nindent 4 }}
+spec:
+  jobLabel: {{ include "zerollm.name" . }}
+  selector:
+    matchLabels:
+      {{- include "zerollm.selectorLabels" . | nindent 6 }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  endpoints:
+    - port: http
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.metrics.serviceMonitor.scrapeTimeout }}
+      path: /metrics
+{{- end }}

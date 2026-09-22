@@ -1,5 +1,0 @@
-
-[dev]
-pytest>=7
-build
-twine

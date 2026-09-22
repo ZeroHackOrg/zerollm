@@ -1,1 +1,16 @@
-pytest>=7.0
+# Core runtime deps (mirrors pyproject [project].dependencies)
+PyYAML>=6.0
+aiohttp>=3.9
+prometheus-client>=0.19
+PyJWT[crypto]>=2.8
+cryptography>=42.0
+
+# Optional tiers
+# HA (Redis-backed shared state):
+# redis>=5.0
+# Tracing (OpenTelemetry):
+# opentelemetry-api>=1.24
+# opentelemetry-sdk>=1.24
+# opentelemetry-exporter-otlp-proto-http>=1.24
+# S3 audit sink:
+# boto3>=1.34

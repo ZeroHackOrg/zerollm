@@ -1,0 +1,163 @@
+# -- ZeroLLM Helm values -----------------------------------------------------
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/zerohackorg/zerollm
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: zerollm.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# -- ZeroLLM configuration ---------------------------------------------------
+config:
+  mode: fail-closed
+  # If empty, a starter config is generated at install time covering the
+  # upstreams/keys below.
+  contents: |
+    schema: "https://zerohack.org/schemas/zerollm/config.schema.json"
+    mode: fail-closed
+    server:
+      host: 0.0.0.0
+      port: 8080
+      limits:
+        max_body_bytes: 1048576
+        request_timeout_s: 30
+        max_sse_buffered_bytes: 65536
+    auth:
+      mode: none
+    upstreams: []
+    routes: []
+    policies:
+      default:
+        decisions:
+          - id: block-injection
+            action: block
+            on: request
+            detector: prompt_injection
+          - id: block-dan
+            action: block
+            on: request
+            detector: dan_jailbreak
+          - id: flag-card
+            action: flag
+            on: response
+            detector: pii_credit_card
+    audit:
+      enabled: true
+      path: /data/zerollm_audit.jsonl
+
+# Upstream LLM endpoints: list of {id, base_url, apiKeyEnv}.
+# The env var name in secrets is built as UPSTREAM_<ID upper>_KEY.
+upstreams: []
+
+# API keys for api-key auth mode: list of {name, tenant, key}. Stored in a
+# Secret and hashed at runtime via the entrypoint probe is NOT done; instead
+# hash them locally and put the digest in `apiKeyHashes`.
+auth:
+  mode: none
+  apiKeys: []
+  # [{name, tenant, hash}] where hash = sha256:<hex>, produced by:
+  #   printf '%s' "$KEY" | zerollm keys hash
+  apiKeyHashes: []
+
+auditSigning:
+  # Base64-encoded Ed25519 PEM private key. When set, the chart mounts it as
+  # /etc/zerollm/secrets/audit_signing_key.pem and records are signed at write
+  # time (verify later with `zerollm.AuditSigner.verify` or `verify_chain`).
+  # Generate with: scripts/audit-signing-keygen.sh
+  create: false
+  privateKeyBase64: ""
+
+extraSecrets: {}
+#   secretName: my-secret          # existing secrets merged in
+#   files: {}                      # extra files mounted at /etc/zerollm/secrets
+
+resourceRequests:
+  cpu: 100m
+  memory: 128Mi
+resourceLimits:
+  cpu: "2"
+  memory: 1Gi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: http
+  initialDelaySeconds: 3
+  periodSeconds: 5
+
+metrics:
+  serviceMonitor:
+    enabled: false
+    interval: 15s
+    scrapeTimeout: 10s
+
+resources: {}
+
+# Redis (HA extras): set enabled + url and install the chart with
+# `--set redis.enabled=true` after `pip install zerollm[ha]` on the image.
+redis:
+  enabled: false
+  url: redis://redis:6379/0

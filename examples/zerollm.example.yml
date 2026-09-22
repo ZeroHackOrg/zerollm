@@ -1,0 +1,142 @@
+# ZeroLLM reference configuration.
+# Validate with:  zerollm config check zerollm.example.yml
+# Generate a default: zerollm config init --output zerollm.yaml
+schema: "https://zerohack.org/schemas/zerollm/config.schema.json"
+
+# fail-closed blocks every request/response hit by a decision rule *and*
+# anything a detector matches that has no explicit decision.
+# fail-open flags (and continues) instead.
+mode: fail-closed
+
+server:
+  host: 0.0.0.0
+  port: 8080
+  limits:
+    max_body_bytes: 1048576        # 1 MiB request body cap
+    request_timeout_s: 30
+    max_sse_buffered_bytes: 65536  # SSE lookahead budget (streaming holdback)
+
+# --- Auth ---------------------------------------------------------------
+auth:
+  mode: api-key
+  header: Authorization
+  api_keys:
+    - name: gateway-service
+      tenant: platform
+      # Created with: printf '%s' "$KEY" | zerollm keys hash
+      key_hash: "sha256:<paste generated sha256 hex here>"
+      scopes: ["proxy.request"]
+
+# Optional per-tenant quotas (sliding window)
+tenants:
+  - id: platform
+    quotas:
+      rpm: 600
+      rpd: 10000
+      tokens_per_min: 50000
+
+# --- Upstreams ------------------------------------------------------------
+upstreams:
+  - id: openai-main
+    type: openai
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+    weight: 3
+    circuit_breaker:
+      max_failures: 5
+      cooldown_s: 60
+      threshold: 0.5
+  - id: anthropic-hb
+    type: anthropic
+    base_url: https://api.anthropic.com/v1
+    api_key_env: ANTHROPIC_API_KEY
+    weight: 1
+
+# --- Routes ---------------------------------------------------------------
+routes:
+  - path: /v1/chat/completions
+    methods: [POST]
+    upstreams: [openai-main, anthropic-hb]
+    policy: default
+
+# --- Policies -------------------------------------------------------------
+policies:
+  default:
+    decisions:
+      - id: block-injection
+        action: block
+        "on": request
+        detector: prompt_injection
+        min_confidence: 0.65
+        reason: "prompt injection attempt"
+
+      - id: block-dan
+        action: block
+        "on": request
+        detector: dan_jailbreak
+
+      - id: redact-secrets
+        action: redact
+        "on": both
+        detector: secret_openai
+        replace_with: "sk-***"
+
+      - id: redact-card
+        action: redact
+        "on": both
+        detector: pii_credit_card
+
+      - id: flag-email
+        action: flag
+        "on": both
+        detector: pii_email
+
+      - id: block-secrets-stream
+        action: block
+        "on": stream
+        detector: secret_aws
+        min_confidence: 0.8
+
+# --- Optional LLM judge detector ------------------------------------------
+detectors:
+  - id: judge
+    type: llm_judge
+    endpoint: https://api.openai.com/v1/chat/completions
+    api_key_env: JUDGE_API_KEY
+    model: gpt-4o-mini
+    threshold: 0.8
+    timeout_s: 10
+
+# --- Tamper-evident audit ---------------------------------------------------
+audit:
+  enabled: true
+  path: /data/zerollm_audit.jsonl
+  signing:
+    private_key_file: /etc/zerollm/secrets/audit_signing_key.pem
+    # public_key_file is only used by the CLI verify tooling, not at runtime
+  rotation:
+    max_bytes: 10485760     # 10 MiB
+    max_files: 10
+  sinks:
+    - type: file
+      path: /data/zerollm_audit.jsonl
+    - type: stdout
+    - type: http
+      url: https://splunk.example.com:8088/services/collector/event
+      auth_token_env: SPLUNK_HEC_TOKEN
+      headers:
+        Accept: application/json
+
+# --- Observability ---------------------------------------------------------
+otel:
+  enabled: false
+  service_name: zerollm
+  endpoint: http://otel-collector:4318
+
+redis:
+  enabled: false
+  url: redis://localhost:6379/0
+
+logging:
+  level: INFO
+  format: json

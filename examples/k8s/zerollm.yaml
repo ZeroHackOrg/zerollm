@@ -1,0 +1,106 @@
+# Minimal Kubernetes deployment (single manifest, no Helm).
+# Apply:  kubectl apply -f examples/k8s/zerollm.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: zerollm-config
+stringData:
+  zerollm.yaml: |
+    schema: "https://zerohack.org/schemas/zerollm/config.schema.json"
+    mode: fail-closed
+    server:
+      host: 0.0.0.0
+      port: 8080
+      limits:
+        max_body_bytes: 1048576
+        request_timeout_s: 30
+    auth:
+      mode: none
+    upstreams:
+      - id: openai
+        base_url: https://api.openai.com/v1
+        api_key_env: OPENAI_API_KEY
+    routes:
+      - path: /v1/chat/completions
+        upstreams: [openai]
+        policy: default
+    policies:
+      default:
+        decisions:
+          - id: block-inj
+            action: block
+            "on": request
+            detector: prompt_injection
+          - id: redact-key
+            action: redact
+            "on": both
+            detector: secret_openai
+    audit:
+      enabled: true
+      path: /data/zerollm_audit.jsonl
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: zerollm-api-keys
+type: Opaque
+stringData:
+  OPENAI_API_KEY: "sk-REPLACE_ME"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zerollm
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: zerollm
+  template:
+    metadata:
+      labels:
+        app: zerollm
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      containers:
+        - name: zerollm
+          image: ghcr.io/zerohackorg/zerollm:1.0.0
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ZEROLM_CONFIG
+              value: /etc/zerollm/config/zerollm.yaml
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: zerollm-api-keys
+                  key: OPENAI_API_KEY
+          readinessProbe:
+            httpGet: { path: /readyz, port: 8080 }
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+          volumeMounts:
+            - name: config
+              mountPath: /etc/zerollm/config
+              readOnly: true
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: config
+          secret:
+            secretName: zerollm-config
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zerollm
+spec:
+  selector:
+    app: zerollm
+  ports:
+    - port: 8080
+      targetPort: 8080
